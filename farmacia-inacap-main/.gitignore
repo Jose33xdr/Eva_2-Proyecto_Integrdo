@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+generated/
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+
+# Artefactos de agentes y validadores locales
+.agents/
+skills-lock.json
+.tsupgrader/
+
+# Scripts temporales locales
+instalar_*.ps1
+corregir_*.ps1
+
+# Backups and archives
+*.zip
+*.tar.gz
+*.7z
+backup_*.sql
+backup-*/
+backend-pack/
+farmagestion-frontend-editable-*/
+
+# Logs & OS/Editor files
+logs/
+*.log
+npm-debug.log*
+.DS_Store
+~$*
+.vscode/*
+!.vscode/extensions.json
+.idea/

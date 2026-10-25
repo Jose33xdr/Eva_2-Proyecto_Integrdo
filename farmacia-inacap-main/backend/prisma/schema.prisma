@@ -1,0 +1,1599 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ======================================================
+// ENUMS - USUARIOS Y SEGURIDAD
+// ======================================================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum TokenType {
+  REFRESH
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
+// ======================================================
+// ENUMS - PRODUCTOS
+// ======================================================
+
+enum ProductType {
+  MEDICINE
+  MEDICAL_DEVICE
+  HYGIENE
+  PERSONAL_CARE
+  SUPPLEMENT
+  DERMOCOSMETIC
+  OTHER
+}
+
+enum PrescriptionType {
+  NONE
+  SIMPLE
+  RETAINED
+  CHECK
+  BALANCE_CONTROL
+}
+
+enum ControlledDrugType {
+  NONE
+  PSYCHOTROPIC
+  NARCOTIC
+}
+
+// ======================================================
+// ENUMS - COMPRAS
+// ======================================================
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+// ======================================================
+// ENUMS - INVENTARIO
+// ======================================================
+
+enum InventoryLocationType {
+  WAREHOUSE
+  DISPLAY
+  REFRIGERATED
+  CONTROLLED
+  QUARANTINE
+  OTHER
+}
+
+enum InventoryMovementType {
+  PURCHASE_RECEIPT
+  TRANSFER
+  SALE
+  CUSTOMER_RETURN
+  SUPPLIER_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  EXPIRED
+  DAMAGE
+  DESTRUCTION
+}
+
+// ======================================================
+// ENUMS - RECETAS
+// ======================================================
+
+enum PrescriptionOrigin {
+  PHYSICAL
+  DIGITAL
+}
+
+enum PrescriptionStatus {
+  ACTIVE
+  PARTIALLY_DISPENSED
+  DISPENSED
+  EXPIRED
+  CANCELLED
+}
+
+enum DispensationStatus {
+  COMPLETED
+  CANCELLED
+}
+
+// ======================================================
+// ENUMS - VENTAS
+// ======================================================
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+// ======================================================
+// ENUMS - CAJA
+// ======================================================
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum CashMovementType {
+  OPENING
+  SALE
+  INCOME
+  EXPENSE
+  REFUND
+  WITHDRAWAL
+  ADJUSTMENT
+}
+
+// ======================================================
+// ENUMS - DOCUMENTOS TRIBUTARIOS
+// ======================================================
+
+enum TaxDocumentType {
+  RECEIPT
+  INVOICE
+}
+
+enum TaxDocumentStatus {
+  PENDING
+  ISSUED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+// ======================================================
+// ENUMS - CONVENIOS Y BENEFICIOS
+// ======================================================
+
+enum AgreementType {
+  ISAPRE
+  INSURANCE
+  CENABAST
+  EMPLOYEE
+  INSTITUTIONAL
+  OTHER
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FIXED_PRICE
+}
+
+enum CoverageStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum SaleCoverageStatus {
+  PENDING
+  APPLIED
+  REJECTED
+  CANCELLED
+}
+
+// ======================================================
+// ENUMS - CONTROLADOS
+// ======================================================
+
+enum ControlledMovementType {
+  PURCHASE_RECEIPT
+  DISPENSATION
+  RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  DESTRUCTION
+}
+
+enum ControlledRecordStatus {
+  ACTIVE
+  CANCELLED
+}
+
+// ======================================================
+// ENUMS - AUDITORÍA / ALERTAS
+// ======================================================
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  EXPORT
+  PRINT
+  APPROVE
+  CANCEL
+  OTHER
+}
+
+enum AlertType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  EXPIRING_SOON
+  EXPIRED
+  CONTROLLED_STOCK
+  PRESCRIPTION_EXPIRING
+  OTHER
+}
+
+enum AlertStatus {
+  PENDING
+  READ
+  RESOLVED
+  DISMISSED
+}
+
+// ======================================================
+// USUARIOS
+// ======================================================
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  rut          String     @unique @db.VarChar(20)
+  firstName    String     @db.VarChar(100)
+  lastName     String     @db.VarChar(100)
+  email        String?    @unique @db.VarChar(150)
+  phone        String?    @db.VarChar(30)
+  username     String     @unique @db.VarChar(80)
+  passwordHash String     @db.VarChar(255)
+  status       UserStatus @default(ACTIVE)
+
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+
+  roleId String @db.Uuid
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  purchaseOrders     PurchaseOrder[]
+  purchaseReceipts   PurchaseReceipt[]
+  inventoryMovements InventoryMovement[]
+  dispensations      Dispensation[]
+
+  sales              Sale[]         @relation("SaleSeller")
+  openedCashSessions CashSession[]  @relation("CashSessionOpenedBy")
+  closedCashSessions CashSession[]  @relation("CashSessionClosedBy")
+  cashMovements      CashMovement[]
+
+  securityTokens    SecurityToken[]
+  controlledRecords ControlledDrugRecord[]
+  auditLogs         AuditLog[]
+  alertsCreated     Alert[]                @relation("AlertCreatedBy")
+  alertsResolved    Alert[]                @relation("AlertResolvedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([status])
+  @@index([lastName, firstName])
+  @@map("users")
+}
+
+// ======================================================
+// ROLES
+// ======================================================
+
+model Role {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(50)
+  name        String  @unique @db.VarChar(100)
+  description String? @db.VarChar(255)
+
+  isSystem Boolean @default(false)
+  isActive Boolean @default(true)
+
+  users       User[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("roles")
+}
+
+// ======================================================
+// PERMISOS
+// ======================================================
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(100)
+  name        String  @db.VarChar(120)
+  description String? @db.VarChar(255)
+
+  module String @db.VarChar(80)
+  action String @db.VarChar(80)
+
+  isActive Boolean @default(true)
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([module, action])
+  @@index([module])
+  @@index([isActive])
+  @@map("permissions")
+}
+
+// ======================================================
+// ROLES <-> PERMISOS
+// ======================================================
+
+model RolePermission {
+  id           String @id @default(uuid()) @db.Uuid
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ======================================================
+// TOKENS DE SEGURIDAD
+// ======================================================
+
+model SecurityToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  type      TokenType
+  tokenHash String    @unique @db.VarChar(255)
+
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([expiresAt])
+  @@map("security_tokens")
+}
+
+// ======================================================
+// CATEGORÍAS
+// ======================================================
+
+model Category {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(50)
+  name        String  @unique @db.VarChar(120)
+  description String? @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("categories")
+}
+
+// ======================================================
+// LABORATORIOS
+// ======================================================
+
+model Laboratory {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(50)
+  name        String  @unique @db.VarChar(150)
+  description String? @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("laboratories")
+}
+
+// ======================================================
+// PRINCIPIOS ACTIVOS
+// ======================================================
+
+model ActiveIngredient {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(50)
+  name        String  @unique @db.VarChar(150)
+  description String? @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  products ProductActiveIngredient[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("active_ingredients")
+}
+
+// ======================================================
+// PRODUCTOS
+// ======================================================
+
+model Product {
+  id String @id @default(uuid()) @db.Uuid
+
+  sku     String  @unique @db.VarChar(60)
+  barcode String? @unique @db.VarChar(50)
+
+  name        String  @db.VarChar(180)
+  description String? @db.Text
+
+  productType        ProductType
+  prescriptionType   PrescriptionType   @default(NONE)
+  controlledDrugType ControlledDrugType @default(NONE)
+
+  requiresPrescription Boolean @default(false)
+  isControlled         Boolean @default(false)
+  isCenabast           Boolean @default(false)
+
+  concentration      String? @db.VarChar(100)
+  pharmaceuticalForm String? @db.VarChar(100)
+  presentation       String? @db.VarChar(150)
+
+  purchasePrice Decimal? @db.Decimal(12, 2)
+  salePrice     Decimal  @db.Decimal(12, 2)
+
+  cenabastMaxPrice   Decimal?  @db.Decimal(12, 2)
+  cenabastValidFrom  DateTime?
+  cenabastValidUntil DateTime?
+
+  minimumStock Int @default(0)
+
+  categoryId String   @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  laboratoryId String?     @db.Uuid
+  laboratory   Laboratory? @relation(fields: [laboratoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  activeIngredients    ProductActiveIngredient[]
+  purchaseOrderDetails PurchaseOrderDetail[]
+  batches              Batch[]
+  inventoryMovements   InventoryMovement[]
+  prescriptionItems    PrescriptionItem[]
+  dispensationItems    DispensationItem[]
+  saleItems            SaleItem[]
+  agreementBenefits    AgreementBenefit[]
+  controlledRecords    ControlledDrugRecord[]
+  alerts               Alert[]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([laboratoryId])
+  @@index([productType])
+  @@index([prescriptionType])
+  @@index([controlledDrugType])
+  @@index([isControlled])
+  @@index([isCenabast])
+  @@index([isActive])
+  @@index([name])
+  @@map("products")
+}
+
+// ======================================================
+// PRODUCTOS <-> PRINCIPIOS ACTIVOS
+// ======================================================
+
+model ProductActiveIngredient {
+  id                 String @id @default(uuid()) @db.Uuid
+  productId          String @db.Uuid
+  activeIngredientId String @db.Uuid
+
+  quantity Decimal? @db.Decimal(12, 3)
+  unit     String?  @db.VarChar(30)
+
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  activeIngredient ActiveIngredient @relation(fields: [activeIngredientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([productId, activeIngredientId])
+  @@index([productId])
+  @@index([activeIngredientId])
+  @@map("product_active_ingredients")
+}
+
+// ======================================================
+// PROVEEDORES
+// ======================================================
+
+model Supplier {
+  id String @id @default(uuid()) @db.Uuid
+
+  rut          String  @unique @db.VarChar(20)
+  businessName String  @db.VarChar(180)
+  tradeName    String? @db.VarChar(180)
+
+  contactName String? @db.VarChar(150)
+  email       String? @db.VarChar(150)
+  phone       String? @db.VarChar(30)
+
+  address String? @db.VarChar(255)
+  commune String? @db.VarChar(100)
+  region  String? @db.VarChar(100)
+
+  isActive Boolean @default(true)
+
+  purchaseOrders PurchaseOrder[]
+  batches        Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([businessName])
+  @@index([isActive])
+  @@map("suppliers")
+}
+
+// ======================================================
+// ÓRDENES DE COMPRA
+// ======================================================
+
+model PurchaseOrder {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(50)
+
+  supplierId String   @db.Uuid
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  createdById String @db.Uuid
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  status PurchaseOrderStatus @default(DRAFT)
+
+  orderDate    DateTime  @default(now())
+  expectedDate DateTime?
+
+  subtotal    Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount   Decimal @default(0) @db.Decimal(14, 2)
+  totalAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  notes String? @db.Text
+
+  details  PurchaseOrderDetail[]
+  receipts PurchaseReceipt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([createdById])
+  @@index([status])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+// ======================================================
+// DETALLE DE ORDEN DE COMPRA
+// ======================================================
+
+model PurchaseOrderDetail {
+  id String @id @default(uuid()) @db.Uuid
+
+  purchaseOrderId String        @db.Uuid
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantityOrdered  Int
+  quantityReceived Int @default(0)
+
+  unitCost Decimal @db.Decimal(12, 2)
+  subtotal Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([purchaseOrderId, productId])
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@map("purchase_order_details")
+}
+
+// ======================================================
+// RECEPCIONES DE COMPRA
+// ======================================================
+
+model PurchaseReceipt {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(50)
+
+  purchaseOrderId String        @db.Uuid
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  receivedById String @db.Uuid
+  receivedBy   User   @relation(fields: [receivedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  receivedAt DateTime @default(now())
+  notes      String?  @db.Text
+
+  batches Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([purchaseOrderId])
+  @@index([receivedById])
+  @@index([receivedAt])
+  @@map("purchase_receipts")
+}
+
+// ======================================================
+// UBICACIONES DE INVENTARIO
+// ======================================================
+
+model InventoryLocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  code        String                @unique @db.VarChar(50)
+  name        String                @unique @db.VarChar(120)
+  type        InventoryLocationType
+  description String?               @db.VarChar(255)
+  isActive    Boolean               @default(true)
+
+  stocks            InventoryStock[]
+  outgoingMovements InventoryMovement[] @relation("MovementOrigin")
+  incomingMovements InventoryMovement[] @relation("MovementDestination")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@map("inventory_locations")
+}
+
+// ======================================================
+// LOTES
+// ======================================================
+
+model Batch {
+  id          String @id @default(uuid()) @db.Uuid
+  batchNumber String @db.VarChar(100)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  supplierId String?   @db.Uuid
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  purchaseReceiptId String?          @db.Uuid
+  purchaseReceipt   PurchaseReceipt? @relation(fields: [purchaseReceiptId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  manufacturingDate DateTime?
+  expirationDate    DateTime
+  receivedAt        DateTime  @default(now())
+  initialQuantity   Int
+
+  purchasePrice Decimal? @db.Decimal(12, 2)
+
+  isBlocked   Boolean @default(false)
+  blockReason String? @db.VarChar(255)
+
+  stocks            InventoryStock[]
+  movements         InventoryMovement[]
+  dispensationItems DispensationItem[]
+  saleItemBatches   SaleItemBatch[]
+  controlledRecords ControlledDrugRecord[]
+  alerts            Alert[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, batchNumber])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([purchaseReceiptId])
+  @@index([expirationDate])
+  @@index([isBlocked])
+  @@map("batches")
+}
+
+// ======================================================
+// STOCK POR LOTE Y UBICACIÓN
+// ======================================================
+
+model InventoryStock {
+  id String @id @default(uuid()) @db.Uuid
+
+  batchId String @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  locationId String            @db.Uuid
+  location   InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity         Int @default(0)
+  reservedQuantity Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, locationId])
+  @@index([batchId])
+  @@index([locationId])
+  @@map("inventory_stocks")
+}
+
+// ======================================================
+// MOVIMIENTOS DE INVENTARIO
+// ======================================================
+
+model InventoryMovement {
+  id String @id @default(uuid()) @db.Uuid
+
+  type InventoryMovementType
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  batchId String @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  originLocationId String?            @db.Uuid
+  originLocation   InventoryLocation? @relation("MovementOrigin", fields: [originLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  destinationLocationId String?            @db.Uuid
+  destinationLocation   InventoryLocation? @relation("MovementDestination", fields: [destinationLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+  unitCost Decimal? @db.Decimal(12, 2)
+
+  referenceType String? @db.VarChar(80)
+  referenceId   String? @db.VarChar(100)
+  reason        String? @db.VarChar(255)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([productId])
+  @@index([batchId])
+  @@index([originLocationId])
+  @@index([destinationLocationId])
+  @@index([userId])
+  @@index([type])
+  @@index([occurredAt])
+  @@map("inventory_movements")
+}
+
+// ======================================================
+// CLIENTES / PACIENTES
+// ======================================================
+
+model Patient {
+  id String @id @default(uuid()) @db.Uuid
+
+  rut       String @unique @db.VarChar(20)
+  firstName String @db.VarChar(100)
+  lastName  String @db.VarChar(100)
+
+  birthDate DateTime?
+  phone     String?   @db.VarChar(30)
+  email     String?   @db.VarChar(150)
+  address   String?   @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  prescriptions     Prescription[]
+  sales             Sale[]
+  coverages         PatientCoverage[]
+  controlledRecords ControlledDrugRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastName, firstName])
+  @@index([isActive])
+  @@map("patients")
+}
+
+// ======================================================
+// MÉDICOS PRESCRIPTORES
+// ======================================================
+
+model Doctor {
+  id String @id @default(uuid()) @db.Uuid
+
+  rut       String @unique @db.VarChar(20)
+  firstName String @db.VarChar(100)
+  lastName  String @db.VarChar(100)
+
+  specialty    String? @db.VarChar(150)
+  registration String? @db.VarChar(100)
+
+  phone String? @db.VarChar(30)
+  email String? @db.VarChar(150)
+
+  isActive Boolean @default(true)
+
+  prescriptions     Prescription[]
+  controlledRecords ControlledDrugRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastName, firstName])
+  @@index([isActive])
+  @@map("doctors")
+}
+
+// ======================================================
+// RECETAS
+// ======================================================
+
+model Prescription {
+  id String @id @default(uuid()) @db.Uuid
+
+  folio String @unique @db.VarChar(100)
+
+  origin           PrescriptionOrigin
+  prescriptionType PrescriptionType
+  status           PrescriptionStatus @default(ACTIVE)
+
+  issueDate      DateTime
+  expirationDate DateTime?
+
+  hasBalanceControl Boolean @default(false)
+
+  patientId String  @db.Uuid
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  doctorId String @db.Uuid
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  fileUrl         String?   @db.VarChar(500)
+  retainedFileUrl String?   @db.VarChar(500)
+  retainedAt      DateTime?
+
+  notes String? @db.Text
+
+  items             PrescriptionItem[]
+  dispensations     Dispensation[]
+  controlledRecords ControlledDrugRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([status])
+  @@index([prescriptionType])
+  @@index([issueDate])
+  @@index([expirationDate])
+  @@map("prescriptions")
+}
+
+// ======================================================
+// DETALLE DE RECETA
+// ======================================================
+
+model PrescriptionItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  prescriptionId String       @db.Uuid
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  prescribedQuantity Int
+  dispensedQuantity  Int @default(0)
+  remainingQuantity  Int
+
+  dosage    String? @db.VarChar(255)
+  frequency String? @db.VarChar(150)
+  duration  String? @db.VarChar(150)
+
+  saleItems SaleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([prescriptionId, productId])
+  @@index([prescriptionId])
+  @@index([productId])
+  @@map("prescription_items")
+}
+
+// ======================================================
+// DISPENSACIONES
+// ======================================================
+
+model Dispensation {
+  id String @id @default(uuid()) @db.Uuid
+
+  code String @unique @db.VarChar(100)
+
+  prescriptionId String       @db.Uuid
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  dispensedById String @db.Uuid
+  dispensedBy   User   @relation(fields: [dispensedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  saleId String? @db.Uuid
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  status DispensationStatus @default(COMPLETED)
+
+  dispensedAt DateTime @default(now())
+  notes       String?  @db.Text
+
+  items             DispensationItem[]
+  controlledRecords ControlledDrugRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prescriptionId])
+  @@index([dispensedById])
+  @@index([saleId])
+  @@index([dispensedAt])
+  @@index([status])
+  @@map("dispensations")
+}
+
+// ======================================================
+// DETALLE DE DISPENSACIÓN
+// ======================================================
+
+model DispensationItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  dispensationId String       @db.Uuid
+  dispensation   Dispensation @relation(fields: [dispensationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  batchId String @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+
+  createdAt DateTime @default(now())
+
+  @@index([dispensationId])
+  @@index([productId])
+  @@index([batchId])
+  @@map("dispensation_items")
+}
+
+// ======================================================
+// CAJAS / TERMINALES
+// ======================================================
+
+model CashRegister {
+  id String @id @default(uuid()) @db.Uuid
+
+  code        String  @unique @db.VarChar(50)
+  name        String  @db.VarChar(120)
+  description String? @db.VarChar(255)
+
+  isActive Boolean @default(true)
+
+  sessions CashSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("cash_registers")
+}
+
+// ======================================================
+// SESIONES / APERTURA Y CIERRE DE CAJA
+// ======================================================
+
+model CashSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  cashRegisterId String       @db.Uuid
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  openedById String @db.Uuid
+  openedBy   User   @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  closedById String? @db.Uuid
+  closedBy   User?   @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  status CashSessionStatus @default(OPEN)
+
+  openingAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  expectedAmount   Decimal? @db.Decimal(14, 2)
+  countedAmount    Decimal? @db.Decimal(14, 2)
+  differenceAmount Decimal? @db.Decimal(14, 2)
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  notes String? @db.Text
+
+  sales     Sale[]
+  movements CashMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cashRegisterId])
+  @@index([openedById])
+  @@index([closedById])
+  @@index([status])
+  @@index([openedAt])
+  @@map("cash_sessions")
+}
+
+// ======================================================
+// VENTAS
+// ======================================================
+
+model Sale {
+  id String @id @default(uuid()) @db.Uuid
+
+  code String @unique @db.VarChar(100)
+
+  status SaleStatus @default(DRAFT)
+
+  sellerId String @db.Uuid
+  seller   User   @relation("SaleSeller", fields: [sellerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  patientId String?  @db.Uuid
+  patient   Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  cashSessionId String?      @db.Uuid
+  cashSession   CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  customerRut  String? @db.VarChar(20)
+  customerName String? @db.VarChar(200)
+
+  customerBusinessName     String? @db.VarChar(200)
+  customerBusinessActivity String? @db.VarChar(200)
+  customerAddress          String? @db.VarChar(255)
+
+  subtotal       Decimal @default(0) @db.Decimal(14, 2)
+  discountAmount Decimal @default(0) @db.Decimal(14, 2)
+  coverageAmount Decimal @default(0) @db.Decimal(14, 2)
+  netAmount      Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(14, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(14, 2)
+
+  saleDate DateTime @default(now())
+  notes    String?  @db.Text
+
+  items             SaleItem[]
+  payments          Payment[]
+  taxDocument       TaxDocument?
+  dispensations     Dispensation[]
+  cashMovements     CashMovement[]
+  coverages         SaleCoverage[]
+  controlledRecords ControlledDrugRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sellerId])
+  @@index([patientId])
+  @@index([cashSessionId])
+  @@index([status])
+  @@index([saleDate])
+  @@index([customerRut])
+  @@map("sales")
+}
+
+// ======================================================
+// DETALLE DE VENTA
+// ======================================================
+
+model SaleItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  saleId String @db.Uuid
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  prescriptionItemId String?           @db.Uuid
+  prescriptionItem   PrescriptionItem? @relation(fields: [prescriptionItemId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  quantity Int
+
+  unitPrice      Decimal @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(14, 2)
+  netAmount      Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(14, 2)
+  totalAmount    Decimal @db.Decimal(14, 2)
+
+  batchAllocations SaleItemBatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([saleId])
+  @@index([productId])
+  @@index([prescriptionItemId])
+  @@map("sale_items")
+}
+
+// ======================================================
+// LOTES UTILIZADOS EN CADA DETALLE DE VENTA
+// ======================================================
+
+model SaleItemBatch {
+  id String @id @default(uuid()) @db.Uuid
+
+  saleItemId String   @db.Uuid
+  saleItem   SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  batchId String @db.Uuid
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([saleItemId, batchId])
+  @@index([saleItemId])
+  @@index([batchId])
+  @@map("sale_item_batches")
+}
+
+// ======================================================
+// PAGOS
+// ======================================================
+
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  saleId String @db.Uuid
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  method PaymentMethod
+  amount Decimal       @db.Decimal(14, 2)
+
+  referenceCode String? @db.VarChar(150)
+
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@index([method])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+// ======================================================
+// MOVIMIENTOS DE CAJA
+// ======================================================
+
+model CashMovement {
+  id String @id @default(uuid()) @db.Uuid
+
+  cashSessionId String      @db.Uuid
+  cashSession   CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  type CashMovementType
+
+  amount      Decimal @db.Decimal(14, 2)
+  description String? @db.VarChar(255)
+
+  saleId String? @db.Uuid
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([cashSessionId])
+  @@index([saleId])
+  @@index([userId])
+  @@index([type])
+  @@index([occurredAt])
+  @@map("cash_movements")
+}
+
+// ======================================================
+// DOCUMENTOS TRIBUTARIOS
+// ======================================================
+
+model TaxDocument {
+  id String @id @default(uuid()) @db.Uuid
+
+  saleId String @unique @db.Uuid
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  type   TaxDocumentType
+  status TaxDocumentStatus @default(PENDING)
+
+  folio String? @db.VarChar(100)
+
+  siiTrackId  String? @db.VarChar(150)
+  siiResponse String? @db.Text
+
+  xmlUrl String? @db.VarChar(500)
+  pdfUrl String? @db.VarChar(500)
+
+  issuedAt   DateTime?
+  acceptedAt DateTime?
+  rejectedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([folio])
+  @@map("tax_documents")
+}
+
+// ======================================================
+// CONVENIOS / ISAPRES / SEGUROS / CENABAST
+// ======================================================
+
+model Agreement {
+  id String @id @default(uuid()) @db.Uuid
+
+  code String @unique @db.VarChar(50)
+  name String @db.VarChar(180)
+
+  type AgreementType
+
+  rut         String? @db.VarChar(20)
+  description String? @db.Text
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  isActive Boolean @default(true)
+
+  plans AgreementPlan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@index([name])
+  @@map("agreements")
+}
+
+// ======================================================
+// PLANES DE CONVENIO
+// ======================================================
+
+model AgreementPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  agreementId String    @db.Uuid
+  agreement   Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  code        String  @db.VarChar(80)
+  name        String  @db.VarChar(180)
+  description String? @db.Text
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  isActive Boolean @default(true)
+
+  benefits  AgreementBenefit[]
+  coverages PatientCoverage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agreementId, code])
+  @@index([agreementId])
+  @@index([isActive])
+  @@map("agreement_plans")
+}
+
+// ======================================================
+// BENEFICIOS / DESCUENTOS POR PRODUCTO
+// ======================================================
+
+model AgreementBenefit {
+  id String @id @default(uuid()) @db.Uuid
+
+  agreementPlanId String        @db.Uuid
+  agreementPlan   AgreementPlan @relation(fields: [agreementPlanId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  productId String?  @db.Uuid
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  discountType DiscountType
+
+  discountValue   Decimal  @db.Decimal(14, 2)
+  maximumDiscount Decimal? @db.Decimal(14, 2)
+  minimumQuantity Int?     @default(1)
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agreementPlanId])
+  @@index([productId])
+  @@index([discountType])
+  @@index([isActive])
+  @@map("agreement_benefits")
+}
+
+// ======================================================
+// COBERTURA / AFILIACIÓN DEL PACIENTE
+// ======================================================
+
+model PatientCoverage {
+  id String @id @default(uuid()) @db.Uuid
+
+  patientId String  @db.Uuid
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  agreementPlanId String        @db.Uuid
+  agreementPlan   AgreementPlan @relation(fields: [agreementPlanId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  beneficiaryCode String? @db.VarChar(100)
+  policyNumber    String? @db.VarChar(100)
+
+  status CoverageStatus @default(ACTIVE)
+
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  isPrimary Boolean @default(false)
+
+  sales SaleCoverage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([patientId, agreementPlanId, beneficiaryCode])
+  @@index([patientId])
+  @@index([agreementPlanId])
+  @@index([status])
+  @@index([isPrimary])
+  @@map("patient_coverages")
+}
+
+// ======================================================
+// APLICACIÓN DE CONVENIOS A UNA VENTA
+// ======================================================
+
+model SaleCoverage {
+  id String @id @default(uuid()) @db.Uuid
+
+  saleId String @db.Uuid
+  sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  patientCoverageId String          @db.Uuid
+  patientCoverage   PatientCoverage @relation(fields: [patientCoverageId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  status SaleCoverageStatus @default(PENDING)
+
+  requestedAmount Decimal? @db.Decimal(14, 2)
+  approvedAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  copayAmount     Decimal  @default(0) @db.Decimal(14, 2)
+
+  authorizationCode String? @db.VarChar(150)
+  externalReference String? @db.VarChar(150)
+
+  responseMessage String?   @db.Text
+  appliedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([saleId])
+  @@index([patientCoverageId])
+  @@index([status])
+  @@map("sale_coverages")
+}
+
+// ======================================================
+// REGISTRO DE MEDICAMENTOS CONTROLADOS
+// ======================================================
+
+model ControlledDrugRecord {
+  id String @id @default(uuid()) @db.Uuid
+
+  recordNumber String                 @unique @db.VarChar(100)
+  movementType ControlledMovementType
+  status       ControlledRecordStatus @default(ACTIVE)
+
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  batchId String? @db.Uuid
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  prescriptionId String?       @db.Uuid
+  prescription   Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  dispensationId String?       @db.Uuid
+  dispensation   Dispensation? @relation(fields: [dispensationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  saleId String? @db.Uuid
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  patientId String?  @db.Uuid
+  patient   Patient? @relation(fields: [patientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  doctorId String? @db.Uuid
+  doctor   Doctor? @relation(fields: [doctorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  quantity      Int
+  balanceBefore Int?
+  balanceAfter  Int?
+
+  prescriptionFolio String? @db.VarChar(100)
+  ispReference      String? @db.VarChar(150)
+
+  reason String? @db.Text
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([productId])
+  @@index([batchId])
+  @@index([prescriptionId])
+  @@index([dispensationId])
+  @@index([saleId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([userId])
+  @@index([movementType])
+  @@index([occurredAt])
+  @@map("controlled_drug_records")
+}
+
+// ======================================================
+// AUDITORÍA
+// ======================================================
+
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  action   AuditAction
+  module   String      @db.VarChar(100)
+  entity   String?     @db.VarChar(100)
+  entityId String?     @db.VarChar(100)
+
+  description String? @db.Text
+
+  oldValues Json?
+  newValues Json?
+  metadata  Json?
+
+  ipAddress String? @db.VarChar(64)
+  userAgent String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ======================================================
+// ALERTAS
+// ======================================================
+
+model Alert {
+  id String @id @default(uuid()) @db.Uuid
+
+  type   AlertType
+  status AlertStatus @default(PENDING)
+
+  title   String @db.VarChar(180)
+  message String @db.Text
+
+  productId String?  @db.Uuid
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  batchId String? @db.Uuid
+  batch   Batch?  @relation(fields: [batchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("AlertCreatedBy", fields: [createdById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  resolvedById String? @db.Uuid
+  resolvedBy   User?   @relation("AlertResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  dueAt      DateTime?
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([productId])
+  @@index([batchId])
+  @@index([dueAt])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+// ======================================================
+// CONFIGURACIÓN GENERAL DEL SISTEMA
+// ======================================================
+
+model SystemSetting {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique @db.VarChar(120)
+  value       String  @db.Text
+  description String? @db.VarChar(255)
+  isPublic    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}

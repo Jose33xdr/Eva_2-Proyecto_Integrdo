@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: farmacia_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: farmacia_db
+      POSTGRES_USER: farmacia_user
+      POSTGRES_PASSWORD: farmacia_password
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - farmacia_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmacia_user -d farmacia_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  farmacia_postgres_data:
